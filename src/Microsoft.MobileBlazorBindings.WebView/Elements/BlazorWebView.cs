@@ -70,6 +70,7 @@ namespace Microsoft.MobileBlazorBindings.WebView.Elements
         public BlazorWebView()
             : this(XamarinDeviceDispatcher.Instance, initOnParentSet: true)
         {
+            Console.WriteLine($"!!!!!!!!!! BlazorWebView create");
         }
 
         protected override void OnParentSet()
@@ -108,6 +109,7 @@ namespace Microsoft.MobileBlazorBindings.WebView.Elements
 
         protected BlazorWebView(Dispatcher dispatcher, bool initOnParentSet)
         {
+            Console.WriteLine($"BlazorWebView Create");
             _initOnParentSet = initOnParentSet;
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
 
@@ -207,6 +209,7 @@ namespace Microsoft.MobileBlazorBindings.WebView.Elements
 
         private void HandleNavigationStarting(object sender, Uri e)
         {
+            Console.WriteLine($"BlazorWebView::HandleNavigationStarting {e}");
             // We stop blazor when we navigate away
             // and we restart it if our host is 0.0.0.0 again.
             Stop();
@@ -234,6 +237,7 @@ namespace Microsoft.MobileBlazorBindings.WebView.Elements
         // BlazorWebView directly from Xamarin Forms XAML. It only works from MBB.
         public async Task InitAsync()
         {
+            Console.WriteLine($"BlazorWebView::InitAsync  -------------- start");
             var services = RootServiceProvider;
             _serviceScope = services.CreateScope();
             var scopeServiceProvider = _serviceScope.ServiceProvider;
@@ -245,10 +249,19 @@ namespace Microsoft.MobileBlazorBindings.WebView.Elements
             _attachInteropTask ??= AttachInteropAsync();
             var handshakeResult = await _attachInteropTask.ConfigureAwait(false);
 
+
+            Console.WriteLine($"BlazorWebView::InitAsync  handshakeResult ");
+
             var loggerFactory = scopeServiceProvider.GetRequiredService<ILoggerFactory>();
             _navigationManager = (BlazorHybridNavigationManager)scopeServiceProvider.GetRequiredService<NavigationManager>();
+            Console.WriteLine($"BlazorWebView::InitAsync  handshakeResult 2");
             _navigationManager.Initialize(_jsRuntime, handshakeResult.BaseUri, handshakeResult.InitialUri);
+
+            Console.WriteLine($"BlazorWebView::InitAsync  handshakeResult 3");
+
             _blazorHybridRenderer = new BlazorHybridRenderer(_ipc, scopeServiceProvider, loggerFactory, _jsRuntime, _dispatcher, ErrorHandler, RootComponentElementSelector);
+
+            Console.WriteLine($"BlazorWebView::InitAsync  handshakeResult  - end");
         }
 
         // TODO: This is also not the right way to trigger a render, as you wouldn't be able to call this if consuming
@@ -269,6 +282,7 @@ namespace Microsoft.MobileBlazorBindings.WebView.Elements
 
         private Task<InteropHandshakeResult> AttachInteropAsync()
         {
+            Console.WriteLine($"BlazorWebView::AttachInteropAsync");
             var resultTcs = new TaskCompletionSource<InteropHandshakeResult>();
 
             // These hacks can go away once there's a proper IPC channel for event notifications etc.
@@ -281,14 +295,19 @@ namespace Microsoft.MobileBlazorBindings.WebView.Elements
 
             _ipc.Once("components:init", args =>
             {
+                Console.WriteLine($"BlazorWebView::IPC::Init");
                 var argsArray = (object[])args;
                 var initialUriAbsolute = ((JsonElement)argsArray[0]).GetString();
                 var baseUriAbsolute = ((JsonElement)argsArray[1]).GetString();
+                //var initialUriAbsolute = argsArray[0];
+                //var baseUriAbsolute = argsArray[1];
+
                 resultTcs.TrySetResult(new InteropHandshakeResult(baseUriAbsolute, initialUriAbsolute));
             });
 
             _ipc.On("BeginInvokeDotNetFromJS", args =>
             {
+                Console.WriteLine($"BlazorWebView::IPC::BeginInvokeDotNetFromJS");
                 var argsArray = (object[])args;
                 var assemblyName = argsArray[1] != null ? ((JsonElement)argsArray[1]).GetString() : null;
                 var methodIdentifier = ((JsonElement)argsArray[2]).GetString();
@@ -314,6 +333,7 @@ namespace Microsoft.MobileBlazorBindings.WebView.Elements
 
             _ipc.On("EndInvokeJSFromDotNet", args =>
             {
+                Console.WriteLine($"BlazorWebView::IPC::EndInvokeJSFromDotNet");
                 var argsArray = (object[])args;
                 DotNetDispatcher.EndInvokeJS(
                     _jsRuntime,

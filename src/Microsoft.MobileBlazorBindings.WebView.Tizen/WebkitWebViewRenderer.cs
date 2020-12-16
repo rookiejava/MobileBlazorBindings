@@ -13,6 +13,9 @@ using Microsoft.MobileBlazorBindings.WebView.Tizen;
 using TWebView = Tizen.WebView.WebView;
 using TChromium = Tizen.WebView.Chromium;
 using Tizen.WebView;
+using System.Text;
+using System.Runtime.InteropServices;
+using System.IO;
 
 [assembly: ExportRenderer(typeof(WebViewExtended), typeof(WebKitWebViewRenderer))]
 
@@ -24,12 +27,20 @@ namespace Microsoft.MobileBlazorBindings.WebView.Tizen
         private WebNavigationEvent _eventState;
         private TWebView NativeWebView => Control.WebView;
 
-        private const string LoadBlazorJSScript =
-            "window.onload = (function blazorInitScript() {" +
-            "    var blazorScript = document.createElement('script');" +
-            "    blazorScript.src = 'framework://blazor.desktop.js';" +
-            "    document.body.appendChild(blazorScript);" +
-            "});";
+        private const string LoadBlazorJSScript = @"
+    if (window.location.href.startsWith('file://'))
+    {
+        var blazorScript = document.createElement('script');
+        blazorScript.src = 'file://framework/blazor.desktop.js';
+        document.body.appendChild(blazorScript);
+        (function () {
+	        window.onpageshow = function(event) {
+		        if (event.persisted) {
+			        window.location.reload();
+		        }
+	        };
+        })();
+    }";
 
         private const string InitScriptSource = @"
             window.__receiveMessageCallbacks = [];
@@ -53,6 +64,7 @@ namespace Microsoft.MobileBlazorBindings.WebView.Tizen
 
         public WebKitWebViewRenderer()
         {
+            Console.WriteLine($"!!!!!!!!!!! WebKitWebViewRenderer");
             RegisterPropertyHandler(WebViewExtended.SourceProperty, Load);
         }
 
@@ -67,7 +79,14 @@ namespace Microsoft.MobileBlazorBindings.WebView.Tizen
         public void LoadUrl(string url)
 #pragma warning restore CA1054 // Uri parameters should not be strings
         {
-            if (!string.IsNullOrEmpty(url))
+            Console.WriteLine($"!!!!!!!!!!!!! - LoadUrl {url}");
+
+            if (url.StartsWith("app://0.0.0.0"))
+            {
+                NativeWebView.LoadUrl("file://app/0.0.0.0");
+                //NativeWebView.LoadUrl("app://0.0.0.0");
+            }
+            else if (!string.IsNullOrEmpty(url))
             {
                 NativeWebView.LoadUrl(url);
             }
@@ -111,8 +130,86 @@ namespace Microsoft.MobileBlazorBindings.WebView.Tizen
 #pragma warning restore CA1309 // Use ordinal string comparison
 #pragma warning restore CA1307 // Specify StringComparison for clarity
             {
-                Element.HandleWebMessageReceived(message.GetBodyAsString());
+
+                var body = message.GetBodyAsString().Replace("file://app/", "app://").Replace("file:///", "app://0.0.0.0/").Replace("file://framework/", "framework://");
+                Console.WriteLine($"PostMessageFromJS : {message.Name} : {body}");
+                Element.HandleWebMessageReceived(body);
             }
+        }
+
+        //void (* Ewk_Context_Intercept_Request_Callback) (Ewk_Context* ewk_context, Ewk_Intercept_Request* intercept_request, void* user_data);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate void Ewk_Context_Intercept_Request_Callback(IntPtr context, IntPtr request, IntPtr userData);
+
+        //EXPORT_API void ewk_context_intercept_request_callback_set(Ewk_Context* ewk_context, Ewk_Context_Intercept_Request_Callback callback, void* user_data);
+        [DllImport("libchromium-ewk.so")]
+        static extern void ewk_context_intercept_request_callback_set(IntPtr context, Ewk_Context_Intercept_Request_Callback callback, IntPtr userdata);
+
+        //EXPORT_API const char* ewk_intercept_request_url_get(Ewk_Intercept_Request * intercept_request);
+        [DllImport("libchromium-ewk.so", EntryPoint = "ewk_intercept_request_url_get")]
+        static extern IntPtr ewk_intercept_request_url_get_(IntPtr request);
+
+        static string ewk_intercept_request_url_get(IntPtr request)
+        {
+            var urlPtr = ewk_intercept_request_url_get_(request);
+            return Marshal.PtrToStringAnsi(urlPtr);
+        }
+
+
+        //EXPORT_API Eina_Bool ewk_intercept_request_ignore(Ewk_Intercept_Request* intercept_request);
+        [DllImport("libchromium-ewk.so")]
+        static extern bool ewk_intercept_request_ignore(IntPtr request);
+
+
+        //EXPORT_API Eina_Bool ewk_intercept_request_response_set(Ewk_Intercept_Request* intercept_request, const char* headers,const char* body, size_t length);
+        [DllImport("libchromium-ewk.so")]
+        static extern bool ewk_intercept_request_response_set(IntPtr request, string headers, string body, uint size);
+
+        Ewk_Context_Intercept_Request_Callback _natvieRequestInterceptCallback;
+
+        void EwkRequestInterceptCallback(IntPtr context, IntPtr request, IntPtr userdata)
+        {
+            var url = ewk_intercept_request_url_get(request);
+            var convertedUrl = url.Replace("file://app/", "app://").Replace("file:///", "app://0.0.0.0/").Replace("file://framework/", "framework://");
+            string scheme = convertedUrl.Split("://")[0];
+
+            Console.WriteLine($"Intercept origin : {url}, Converted {convertedUrl} - scheme : {scheme}");
+
+            if (Element != null && Element.SchemeHandlers.TryGetValue(scheme, out var schemeHandler))
+            {
+
+                var uri = new Uri(convertedUrl);
+                Console.WriteLine($"uri : Host : {uri.Host} - {uri.AbsolutePath.Substring(1)} - test {uri.Host.Equals("0.0.0.0", StringComparison.Ordinal)}");
+
+                var stream = schemeHandler(convertedUrl, out string contentType);
+                if (stream != null)
+                {
+                    Console.WriteLine($"Intercepted - {convertedUrl}");
+                    var header = $"HTTP/1.0 200 OK\r\nContent-Type:{contentType}; charset=utf-8\r\nCache-Control:no-cache, max-age=0, must-revalidate, no-store\r\n\r\n";
+
+                    if (scheme == "framework")
+                    {
+
+#pragma warning disable CA2000 // Dispose objects before losing scope
+                        var memoryStream = new MemoryStream();
+#pragma warning restore CA2000 // Dispose objects before losing scope
+
+                        var buffer = Encoding.UTF8.GetBytes(InitScriptSource);
+                        memoryStream.Write(buffer, 0, buffer.Length);
+                        stream.CopyTo(memoryStream);
+                        stream.Dispose();
+                        memoryStream.Position = 0;
+                        stream = memoryStream;
+                    }
+
+                    var body = new StreamReader(stream).ReadToEnd();
+                    ewk_intercept_request_response_set(request, header, body, (uint)body.Length);
+                    Console.WriteLine($"Intercepted - {convertedUrl} , header : {header} - content-length:{body.Length}");
+                    return;
+                }
+            }
+            ewk_intercept_request_ignore(request);
         }
 
         protected override void OnElementChanged(ElementChangedEventArgs<WebViewExtended> e)
@@ -131,6 +228,15 @@ namespace Microsoft.MobileBlazorBindings.WebView.Tizen
                 NativeWebView.LoadFinished += OnLoadFinished;
                 NativeWebView.LoadError += OnLoadError;
                 NativeWebView.AddJavaScriptMessageHandler("BlazorHandler", PostMessageFromJS);
+
+                var context = NativeWebView.GetContext();
+                var handleField = context.GetType().GetField("_handle", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                IntPtr contextHandle = (IntPtr)handleField.GetValue(context);
+                Console.WriteLine($"Context Handle {contextHandle}");
+
+                _natvieRequestInterceptCallback = EwkRequestInterceptCallback;
+                ewk_context_intercept_request_callback_set(contextHandle, _natvieRequestInterceptCallback, IntPtr.Zero);
+                NativeWebView.GetSettings().JavaScriptEnabled = true;
             }
 
             if (e.OldElement != null)
@@ -157,7 +263,9 @@ namespace Microsoft.MobileBlazorBindings.WebView.Tizen
 
         private void OnSendMessageFromJSToDotNetRequested(object sender, string message)
         {
+            Console.WriteLine($"Tizen.WebViewRenderer::OnSendMessageFromJSToDotNetRequested = {message}");
             var messageJSStringLiteral = JavaScriptEncoder.Default.Encode(message);
+            Console.WriteLine($"Tizen.WebViewRenderer::OnSendMessageFromJSToDotNetRequested = encoded[{messageJSStringLiteral}]");
             NativeWebView.Eval($"__dispatchMessageCallback(\"{messageJSStringLiteral}\")");
         }
 
@@ -171,10 +279,15 @@ namespace Microsoft.MobileBlazorBindings.WebView.Tizen
         void OnLoadStarted(object sender, EventArgs e)
         {
             string url = NativeWebView.Url;
+
+            url = url.Replace("file://app/", "app://").Replace("file:///", "app://0.0.0.0/").Replace("file://framework/", "framework://");
+
+
             if (!string.IsNullOrEmpty(url))
             {
                 var args = new WebNavigatingEventArgs(_eventState, new UrlWebViewSource { Url = url }, url);
                 Element.SendNavigating(args);
+                Element.HandleNavigationStarting(new Uri(url));
 
                 if (args.Cancel)
                 {
@@ -185,6 +298,7 @@ namespace Microsoft.MobileBlazorBindings.WebView.Tizen
 
         void OnLoadFinished(object sender, EventArgs e)
         {
+            Console.WriteLine($"OnLoadFinished!!!!");
             string url = NativeWebView.Url;
             if (!string.IsNullOrEmpty(url))
                 SendNavigated(new UrlWebViewSource { Url = url }, _eventState, WebNavigationResult.Success);
@@ -193,7 +307,11 @@ namespace Microsoft.MobileBlazorBindings.WebView.Tizen
             UpdateCanGoBackForward();
 
             NativeWebView.Eval(LoadBlazorJSScript);
-            NativeWebView.Eval(InitScriptSource);
+            //NativeWebView.Eval(InitScriptSource);
+            Console.WriteLine($"end eval-");
+
+            Element.HandleNavigationFinished(new Uri(url));
+
         }
 
         void Load()

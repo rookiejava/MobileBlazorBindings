@@ -4,6 +4,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.MobileBlazorBindings;
+using System;
 using Xamarin.Forms;
 
 namespace HybridApp
@@ -12,6 +13,7 @@ namespace HybridApp
     {
         public App(string[] args = null, IFileProvider fileProvider = null)
         {
+            Console.WriteLine($"!! App created");
             var hostBuilder = MobileBlazorBindingsHost.CreateDefaultBuilder(args)
                 .ConfigureServices((hostContext, services) =>
                 {

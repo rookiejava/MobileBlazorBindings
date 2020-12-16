@@ -41,6 +41,7 @@ namespace Microsoft.MobileBlazorBindings.WebView
 
         public void On(string eventName, Action<object> callback)
         {
+            Console.WriteLine($"Registed name {eventName}");
             lock (_registrations)
             {
                 if (!_registrations.TryGetValue(eventName, out var group))
@@ -77,35 +78,44 @@ namespace Microsoft.MobileBlazorBindings.WebView
 
         private void HandleScriptNotify(object sender, string message)
         {
+            Console.WriteLine($"HandleScriptNotify - mainthread");
             var value = message;
 
             // Move off the browser UI thread
             Task.Factory.StartNew(
                 () =>
                 {
+                    Console.WriteLine($"IPC::HandleScriptNotify 2 - {value}");
                     if (value.StartsWith("ipc:", StringComparison.Ordinal))
                     {
                         var spacePos = value.IndexOf(' ');
                         var eventName = value.Substring(4, spacePos - 4);
                         var argsJson = value.Substring(spacePos + 1);
+
+                        Console.WriteLine($"IPC eventName : [{eventName}] argsJson {argsJson}");
+
                         var args = JsonSerializer.Deserialize<object[]>(argsJson);
+
+                        Console.WriteLine($"IPC end deserialize - {eventName == "components:init"}");
 
                         Action<object>[] callbacksCopy;
                         lock (_registrations)
                         {
                             if (!_registrations.TryGetValue(eventName, out var callbacks))
                             {
+                                Console.WriteLine($"no event handler");
                                 return;
                             }
 
                             callbacksCopy = callbacks.ToArray();
                         }
-
                         foreach (var callback in callbacksCopy)
                         {
                             _webView.Dispatcher.BeginInvokeOnMainThread(() =>
                             {
+                                Console.WriteLine($"before call callback");
                                 callback(args);
+                                Console.WriteLine($"after call callback");
                             });
                         }
                     }
@@ -113,6 +123,8 @@ namespace Microsoft.MobileBlazorBindings.WebView
                 CancellationToken.None,
                 TaskCreationOptions.None,
                 TaskScheduler.Default);
+
+            Console.WriteLine($"HandleScriptNotify - mainthread - end");
         }
 
         public void Dispose()

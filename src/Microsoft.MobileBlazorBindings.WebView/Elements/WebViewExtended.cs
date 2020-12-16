@@ -14,6 +14,7 @@ namespace Microsoft.MobileBlazorBindings.WebView.Elements
     {
         public WebViewExtended(IBlazorErrorHandler errorHandler)
         {
+            Console.WriteLine($"Create WebViewExtended");
             ErrorHandler = errorHandler;
         }
 

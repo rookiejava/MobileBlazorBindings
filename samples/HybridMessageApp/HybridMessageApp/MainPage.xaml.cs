@@ -38,6 +38,7 @@ namespace HybridMessageApp
             }
             Host = hostBuilder.Build();
 
+
             InitializeComponent();
 
             FolderWebView.Host = Host;

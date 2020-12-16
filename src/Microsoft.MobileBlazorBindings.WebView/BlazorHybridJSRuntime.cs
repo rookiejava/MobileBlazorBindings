@@ -17,14 +17,19 @@ namespace Microsoft.MobileBlazorBindings.WebView
 
         public BlazorHybridJSRuntime()
         {
+            Console.WriteLine($"Create BlazorHybridJSRuntime");
             JsonSerializerOptions.Converters.Add(new ElementReferenceJsonConverter());
+            Console.WriteLine($"Create BlazorHybridJSRuntime - end");
         }
 
         protected override void BeginInvokeJS(long asyncHandle, string identifier, string argsJson)
         {
+            Console.WriteLine($"BeginInvokeJS-- start");
             ThrowIfIpcNotSet();
 
             _ipc.Send("JS.BeginInvokeJS", asyncHandle, identifier, argsJson);
+
+            Console.WriteLine($"BeginInvokeJS-- end");
         }
 
         protected override void EndInvokeDotNet(DotNetInvocationInfo invocationInfo, in DotNetInvocationResult invocationResult)

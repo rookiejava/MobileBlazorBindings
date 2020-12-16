@@ -3,6 +3,7 @@
 
 using Microsoft.MobileBlazorBindings.Core;
 using Microsoft.MobileBlazorBindings.WebView.Elements;
+using System;
 using XF = Xamarin.Forms;
 
 namespace Microsoft.MobileBlazorBindings.Elements.Handlers
@@ -16,6 +17,7 @@ namespace Microsoft.MobileBlazorBindings.Elements.Handlers
         public WebViewHandler(NativeComponentRenderer renderer, WebViewExtended control)
             : base(renderer, control)
         {
+            Console.WriteLine($"WebViewHandler created");
             Control = control;
 
             ConfigureEvent(

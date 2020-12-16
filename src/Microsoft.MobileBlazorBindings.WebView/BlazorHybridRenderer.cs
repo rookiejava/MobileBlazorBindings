@@ -43,21 +43,28 @@ namespace Microsoft.MobileBlazorBindings.WebView
         public BlazorHybridRenderer(IPC ipc, IServiceProvider serviceProvider, ILoggerFactory loggerFactory, JSRuntime jsRuntime, Dispatcher dispatcher, IBlazorErrorHandler blazorErrorHandler, string rootComponentElementSelector)
             : base(serviceProvider, loggerFactory)
         {
+            Console.WriteLine($"BlazorHybridRenderer 1");
             _ipc = ipc ?? throw new ArgumentNullException(nameof(ipc));
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             _jsRuntime = jsRuntime ?? throw new ArgumentNullException(nameof(jsRuntime));
             _blazorErrorHandler = blazorErrorHandler;
             rootComponentElementSelector ??= "app";
 
+            Console.WriteLine($"BlazorHybridRenderer 2");
+
             var rootComponent = new RenderFragmentComponent();
             var rootComponentId = AssignRootComponentId(rootComponent);
             RootRenderHandle = rootComponent.RenderHandle;
+
+            Console.WriteLine($"BlazorHybridRenderer 3");
 
             var initTask = _jsRuntime.InvokeAsync<object>(
                 "Blazor._internal.attachRootComponentToElement",
                 rootComponentElementSelector,
                 rootComponentId,
                 RendererId);
+
+            Console.WriteLine($"BlazorHybridRenderer 4");
             CaptureAsyncExceptions(initTask);
         }
 
