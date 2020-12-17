@@ -28,10 +28,10 @@ namespace Microsoft.MobileBlazorBindings.WebView.Tizen
         private TWebView NativeWebView => Control.WebView;
 
         private const string LoadBlazorJSScript = @"
-    if (window.location.href.startsWith('file://'))
+    if (window.location.href.startsWith('http://0.0.0.0/'))
     {
         var blazorScript = document.createElement('script');
-        blazorScript.src = 'file://framework/blazor.desktop.js';
+        blazorScript.src = 'http://framework/blazor.desktop.js';
         document.body.appendChild(blazorScript);
         (function () {
 	        window.onpageshow = function(event) {
@@ -81,12 +81,12 @@ namespace Microsoft.MobileBlazorBindings.WebView.Tizen
         {
             Console.WriteLine($"!!!!!!!!!!!!! - LoadUrl {url}");
 
-            if (url.StartsWith("app://0.0.0.0"))
-            {
-                NativeWebView.LoadUrl("file://app/0.0.0.0");
-                //NativeWebView.LoadUrl("app://0.0.0.0");
-            }
-            else if (!string.IsNullOrEmpty(url))
+            //if (url.StartsWith("app://0.0.0.0"))
+            //{
+            //    NativeWebView.LoadUrl("file://app/0.0.0.0");
+            //    //NativeWebView.LoadUrl("app://0.0.0.0");
+            //}
+            //else if (!string.IsNullOrEmpty(url))
             {
                 NativeWebView.LoadUrl(url);
             }
@@ -171,7 +171,10 @@ namespace Microsoft.MobileBlazorBindings.WebView.Tizen
         void EwkRequestInterceptCallback(IntPtr context, IntPtr request, IntPtr userdata)
         {
             var url = ewk_intercept_request_url_get(request);
-            var convertedUrl = url.Replace("file://app/", "app://").Replace("file:///", "app://0.0.0.0/").Replace("file://framework/", "framework://");
+            var convertedUrl = url.Replace("http://framework/", "framework://");
+
+        
+
             string scheme = convertedUrl.Split("://")[0];
 
             Console.WriteLine($"Intercept origin : {url}, Converted {convertedUrl} - scheme : {scheme}");
